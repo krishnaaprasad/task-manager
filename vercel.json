@@ -1,0 +1,9 @@
+{
+  "cron": [
+    {
+      "path": "/api/daily-summary",
+      "schedule": "30 4 * * *",
+      "tz": "Asia/Kolkata"
+    }
+  ]
+}
