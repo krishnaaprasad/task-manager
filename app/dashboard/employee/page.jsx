@@ -6,9 +6,15 @@ import TaskModal from "@/components/TaskModal";
 import TaskActivityModal from "@/components/TaskActivityModal";
 import { supabase } from "@/lib/supabaseClient";
 import NotificationBell from "@/components/NotificationBell";
+import { redirect } from "next/navigation";
 import { PencilSquareIcon, TrashIcon } from "@heroicons/react/24/solid";
 
 const PAGE_SIZE = 10;
+
+
+export default function EmployeeRedirect() {
+  redirect("/dashboard");
+}
 
 export default function EmployeeDashboard() {
   const [currentUser, setCurrentUser] = useState(null);

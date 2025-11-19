@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import TaskModal from "@/components/TaskModal";
 import TaskActivityModal from "@/components/TaskActivityModal";
 import { supabase } from "@/lib/supabaseClient";
+import { redirect } from "next/navigation";
 import NotificationBell from "@/components/NotificationBell";
 import {
   PencilSquareIcon,
@@ -14,7 +15,9 @@ import {
 } from "@heroicons/react/24/solid";
 
 const PAGE_SIZE = 10;
-
+export default function ManagerRedirect() {
+  redirect("/dashboard");
+}
 export default function ManagerDashboard() {
   const [currentUser, setCurrentUser] = useState(null);
   const [employeeInfo, setEmployeeInfo] = useState(null);
