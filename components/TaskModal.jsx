@@ -60,7 +60,7 @@ export default function TaskModal({
 
     let uploadedFiles = [];
 
-    // Upload files
+    // Upload files (optional)
     if (files.length > 0) {
       for (const file of files) {
         const fileName = `${Date.now()}-${file.name}`;
@@ -175,7 +175,7 @@ export default function TaskModal({
 
           {/* TITLE */}
           <div>
-            <label className="text-sm opacity-80">Title</label>
+            <label className="text-sm opacity-80">Title *</label>
             <input
               value={title}
               onChange={(e) => setTitle(e.target.value)}
@@ -193,10 +193,11 @@ export default function TaskModal({
 
           {/* BRIEF */}
           <div>
-            <label className="text-sm opacity-80">Brief</label>
+            <label className="text-sm opacity-80">Brief *</label>
             <textarea
               value={brief}
               onChange={(e) => setBrief(e.target.value)}
+              required
               disabled={!canEdit}
               rows={3}
               className="
@@ -211,9 +212,10 @@ export default function TaskModal({
 
           {/* ASSIGN */}
           <div>
-            <label className="text-sm opacity-80">Assign To</label>
+            <label className="text-sm opacity-80">Assign To *</label>
             <select
               value={assignedTo}
+              required
               onChange={(e) => {
                 const name = e.target.value;
                 setAssignedTo(name);
@@ -227,7 +229,7 @@ export default function TaskModal({
                 focus:ring-2 focus:ring-blue-500 mt-1
               "
             >
-              <option>-- Select Employee --</option>
+              <option value="">-- Select Employee --</option>
               {employees.map((emp) => (
                 <option key={emp.email} value={emp.full_name}>
                   {emp.full_name}
@@ -238,9 +240,10 @@ export default function TaskModal({
 
           {/* PRIORITY */}
           <div>
-            <label className="text-sm opacity-80">Priority</label>
+            <label className="text-sm opacity-80">Priority *</label>
             <select
               value={priority}
+              required
               onChange={(e) => setPriority(e.target.value)}
               disabled={!canEdit}
               className="
@@ -259,10 +262,11 @@ export default function TaskModal({
           {/* DATES */}
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="text-sm opacity-80">Start Date</label>
+              <label className="text-sm opacity-80">Start Date *</label>
               <input
                 type="date"
                 value={startDate}
+                required
                 disabled={!canEdit}
                 onChange={(e) => setStartDate(e.target.value)}
                 className="
@@ -274,10 +278,11 @@ export default function TaskModal({
             </div>
 
             <div>
-              <label className="text-sm opacity-80">Due Date</label>
+              <label className="text-sm opacity-80">Due Date *</label>
               <input
                 type="date"
                 value={dueDate}
+                required
                 disabled={!canEdit}
                 onChange={(e) => setDueDate(e.target.value)}
                 className="
@@ -289,9 +294,9 @@ export default function TaskModal({
             </div>
           </div>
 
-          {/* FILE UPLOAD */}
+          {/* FILE UPLOAD (optional) */}
           <div>
-            <label className="text-sm opacity-80">Attachments</label>
+            <label className="text-sm opacity-80">Attachments (optional)</label>
             <input
               type="file"
               multiple

@@ -7,8 +7,15 @@ export default function Header() {
   const { theme, toggleTheme } = useTheme();
 
   return (
-    <header className="fixed top-0 left-0 right-0 h-16 bg-white dark:bg-gray-800 border-b dark:border-gray-700 flex items-center justify-between px-6 z-50 shadow-sm">
-      
+    <header className="
+      fixed top-0 left-0 right-0
+      h-16 px-6 
+      flex items-center justify-between
+      bg-white/80 dark:bg-gray-900/80
+      backdrop-blur-md
+      border-b border-gray-200 dark:border-gray-700
+      shadow-sm z-50
+    ">
       <h1 className="text-xl font-semibold text-gray-800 dark:text-gray-200">
         Creative Team Dashboard
       </h1>
