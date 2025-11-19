@@ -65,7 +65,7 @@ export default function ExportActivityButton({ tasks = [] }) {
   };
 
   return (
-    <button onClick={exportAll} className="px-3 py-1 bg-emerald-600 rounded" disabled={loading}>
+    <button onClick={exportAll} className="px-3 py-1 bg-emerald-600 rounded cursor-pointer" disabled={loading}>
       {loading ? "Exporting..." : "Export Activity (XLSX)"}
     </button>
   );

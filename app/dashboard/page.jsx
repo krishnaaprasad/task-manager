@@ -10,6 +10,7 @@ import ExportActivityButton from "@/components/ExportActivityButton";
 import BarChart from "@/components/charts/BarChart";
 import LineChart from "@/components/charts/LineChart";
 import PieChart from "@/components/charts/PieChart";
+import toast from "react-hot-toast";
 import {
   PencilSquareIcon,
   TrashIcon,
@@ -91,11 +92,13 @@ export default function DashboardPage() {
     fetchAll();
 
     const channel = supabase
-      .channel("dashboard-tasks")
+      .channel("dashboard-tasks", { config: { broadcast: { self: true } } })
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "tasks" },
-        () => fetchAll()
+        (payload) => {
+          fetchAll(); // refresh list
+        }
       )
       .subscribe();
 
@@ -129,10 +132,13 @@ export default function DashboardPage() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ id: task.id, approve: true, manager_email: currentUser.email }),
     });
+
     const json = await res.json();
-    if (!res.ok) return alert(json.error || "Approval failed");
-    alert("Task Approved");
+    if (!res.ok) return toast.error(json.error || "Approval failed");
+
+    toast.success("Task Approved!");
   };
+
 
   const handleReject = async (task) => {
     const res = await fetch("/api/tasks", {
@@ -140,10 +146,13 @@ export default function DashboardPage() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ id: task.id, approve: false, manager_email: currentUser.email }),
     });
+
     const json = await res.json();
-    if (!res.ok) return alert(json.error || "Reject failed");
-    alert("Task Rejected");
+    if (!res.ok) return toast.error(json.error || "Reject failed");
+
+    toast.success("Task Rejected!");
   };
+
 
   const handleStatusChange = async (task, newStage) => {
     const res = await fetch("/api/tasks", {
@@ -158,15 +167,23 @@ export default function DashboardPage() {
   const markComplete = async (task) => {
     const ok = confirm("Mark this task as completed?");
     if (!ok) return;
+
     const res = await fetch("/api/tasks", {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id: task.id, requester_email: currentUser.email, updates: { mark_complete: true } }),
+      body: JSON.stringify({
+        id: task.id,
+        requester_email: currentUser.email,
+        updates: { mark_complete: true },
+      }),
     });
+
     const json = await res.json();
-    if (!res.ok) return alert(json.error);
-    alert("Task marked completed");
+    if (!res.ok) return toast.error(json.error);
+
+    toast.success("Task marked completed!");
   };
+
 
   // filtering + paging
   const filtered = useMemo(() => {
@@ -196,12 +213,12 @@ export default function DashboardPage() {
           <span className="text-sm text-gray-300">{employeeInfo.full_name} ({employeeInfo.role})</span>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 cursor-pointer">
           <NotificationBell />
           <ExportActivityButton tasks={tasks} />
           <button
             onClick={async () => { await supabase.auth.signOut(); window.location.href = "/"; }}
-            className="px-3 py-1 bg-red-600 rounded"
+            className="px-3 py-1 bg-red-600 rounded cursor-pointer"
           >Logout</button>
         </div>
       </div>
@@ -287,7 +304,11 @@ export default function DashboardPage() {
           </thead>
           <tbody>
             {pageData.map((t, i) => {
-              const canEdit = (employeeInfo.role === "Manager") || (t.created_by_email === currentUser.email && (t.stage === "Not Started" || t.approval_status === "pending" || !t.assigned_to_name));
+              // NEW: Creator & Manager can ALWAYS edit
+              const canEdit =
+                employeeInfo.role === "Manager" ||
+                t.created_by_email === currentUser.email;
+
               return (
                 <tr key={t.id} className="border-t border-gray-700">
                   <td className="p-3">{t.task_number}</td>
@@ -302,32 +323,131 @@ export default function DashboardPage() {
                     {t.completion_date ? new Date(t.completion_date).toLocaleDateString() : ((t.created_by_email === currentUser?.email || isManager) ? (<input type="checkbox" onChange={() => markComplete(t)} className="w-4 h-4 cursor-pointer" />) : "-")}
                   </td>
                   <td className="p-3">
-                    <select value={t.stage} onChange={(e) => handleStatusChange(t, e.target.value)} className="bg-gray-900 p-1 rounded">
+                  {/* Only manager OR assigned employee can change stage */}
+                  {(isManager || t.assigned_to_name === employeeInfo.full_name) ? (
+                    <select
+                      value={t.stage}
+                      onChange={(e) => handleStatusChange(t, e.target.value)}
+                      className="bg-gray-900 p-1 rounded"
+                    >
                       <option>Not Started</option>
                       <option>Started</option>
                       <option>Done</option>
+
+                      {/* NEW OPTION: visible only to assigned employee */}
+                      {t.assigned_to_name === employeeInfo.full_name && (
+                        <option>Send for Review</option>
+                      )}
                     </select>
-                  </td>
+                  ) : (
+                    /* Everyone else only sees text */
+                    <span>{t.stage}</span>
+                  )}
+                </td>
                   <td className="p-3">{t.created_by_name || t.created_by_email}</td>
-                  <td className="p-3 flex gap-2">
-                    {canEdit && <button onClick={() => openEdit(t)} className="p-1"><PencilSquareIcon className="w-5 h-5 text-blue-400" /></button>}
-                    {t.created_by_email === currentUser.email && <button onClick={() => {
-                      fetch("/api/tasks", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: t.id, requester_email: currentUser.email, updates: { delete_task: true } }) })
-                      .then(r => r.json()).then(j => { if (j.pending) alert("Delete request sent"); else if (j.deleted) setTasks(prev => prev.filter(x => x.id !== t.id)); });
-                    }} className="p-1"><TrashIcon className="w-5 h-5 text-red-400" /></button>}
-                    <button onClick={() => setActivityTask(t)} className="p-1">
-                      <svg className="w-5 h-5 text-indigo-400" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-                        <circle cx="12" cy="12" r="10" strokeWidth="1.5"></circle>
-                        <path d="M12 8v4l2 2" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"></path>
+                  <td className="p-3 flex gap-2 items-center">
+
+                  {/* EDIT */}
+                  {canEdit && (
+                    <button onClick={() => openEdit(t)} className="p-1 hover:bg-gray-700 rounded">
+                      <PencilSquareIcon className="w-5 h-5 text-blue-400" />
+                    </button>
+                  )}
+
+                  {/* DELETE */}
+                  {t.created_by_email === currentUser.email && (
+                    <button
+                      onClick={() => {
+                        fetch("/api/tasks", {
+                          method: "PUT",
+                          headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify({
+                            id: t.id,
+                            requester_email: currentUser.email,
+                            updates: { delete_task: true },
+                          }),
+                        })
+                          .then((r) => r.json())
+                          .then((j) => {
+                            if (j.pending) alert("Delete request sent");
+                            else if (j.deleted)
+                              setTasks((prev) => prev.filter((x) => x.id !== t.id));
+                          });
+                      }}
+                      className="p-1 hover:bg-gray-700 rounded"
+                    >
+                      <TrashIcon className="w-5 h-5 text-red-400" />
+                    </button>
+                  )}
+
+                  {/* VIEW ATTACHMENTS */}
+                  {t.attachments?.length > 0 && (
+                    <button
+                      onClick={() => {
+                        const list = t.attachments
+                          .map((f) => `${f.name} → ${f.url}`)
+                          .join("\n");
+
+                        alert("Files:\n\n" + list);
+                      }}
+                      className="p-1 hover:bg-gray-700 rounded"
+                    >
+                      <svg
+                        className="w-5 h-5 text-yellow-400"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="1.5"
+                        viewBox="0 0 24 24"
+                      >
+                        <path
+                          d="M21 15v4a2 2 0 01-2 2h-4m6-6l-7-7m7 7h-4m-2-9H7a2 2 0 00-2 2v10"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        />
                       </svg>
                     </button>
-                    {t.approval_status === "pending" && isManager && (
-                      <>
-                        <button onClick={() => handleApprove(t)} className="p-1"><CheckIcon className="w-5 h-5 text-green-400" /></button>
-                        <button onClick={() => handleReject(t)} className="p-1"><XMarkIcon className="w-5 h-5 text-yellow-400" /></button>
-                      </>
-                    )}
-                  </td>
+                  )}
+
+                  {/* ACTIVITY */}
+                  <button
+                    onClick={() => setActivityTask(t)}
+                    className="p-1 hover:bg-gray-700 rounded"
+                  >
+                    <svg
+                      className="w-5 h-5 text-indigo-400"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                    >
+                      <circle cx="12" cy="12" r="10" strokeWidth="1.5"></circle>
+                      <path
+                        d="M12 8v4l2 2"
+                        strokeWidth="1.5"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      ></path>
+                    </svg>
+                  </button>
+
+                  {/* APPROVAL BUTTONS */}
+                  {t.approval_status === "pending" && isManager && (
+                    <>
+                      <button
+                        onClick={() => handleApprove(t)}
+                        className="p-1 hover:bg-gray-700 rounded"
+                      >
+                        <CheckIcon className="w-5 h-5 text-green-400" />
+                      </button>
+
+                      <button
+                        onClick={() => handleReject(t)}
+                        className="p-1 hover:bg-gray-700 rounded"
+                      >
+                        <XMarkIcon className="w-5 h-5 text-yellow-400" />
+                      </button>
+                    </>
+                  )}
+                </td>
                 </tr>
               );
             })}

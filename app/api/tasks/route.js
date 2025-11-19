@@ -362,8 +362,11 @@ export async function PUT(req) {
     }
 
     // =====================================================================
-    // WORK STATUS UPDATE (NO auto completion)
+    // =====================================================================
+    // WORK STATUS UPDATE (includes "Send For Review")
+    // =====================================================================
     if (updates.stage) {
+
       if (!isAssignedEmployee && !isManager) {
         return NextResponse.json(
           { error: "Only assigned employee or manager can change stage" },
@@ -371,7 +374,74 @@ export async function PUT(req) {
         );
       }
 
-      // add activity entry
+      // --- NEW FEATURE: SEND FOR REVIEW ---
+      if (updates.stage === "Send For Review") {
+        const newActivity = [
+          ...(task.activity || []),
+          {
+            action: "Sent For Review",
+            user: requester_email,
+            timestamp: new Date().toISOString(),
+            comment: `Task sent for review`,
+          },
+        ];
+
+        // update task
+        const { data: updatedTask, error } = await supabase
+          .from("tasks")
+          .update({
+            stage: "Send For Review",
+            updated_at: new Date().toISOString(),
+            activity: newActivity,
+          })
+          .eq("id", id)
+          .select()
+          .single();
+
+        if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+        // notify creator
+        await createNotification(
+          updatedTask.created_by_email,
+          "Task sent for review",
+          `${requesterName} sent "${updatedTask.title}" for review`,
+          id
+        );
+
+        // notify manager
+        const { data: manager } = await supabase
+          .from("employees")
+          .select("*")
+          .eq("role", "Manager")
+          .limit(1)
+          .maybeSingle();
+
+        if (manager?.email) {
+          await createNotification(
+            manager.email,
+            "Review Requested",
+            `${requesterName} sent "${updatedTask.title}" for review`,
+            id
+          );
+        }
+
+        // notify assignee (if creator reviewing)
+        if (
+          updatedTask.assigned_to_email &&
+          updatedTask.assigned_to_email !== requester_email
+        ) {
+          await createNotification(
+            updatedTask.assigned_to_email,
+            "Task sent for review",
+            `"${updatedTask.title}" was sent for review`,
+            id
+          );
+        }
+
+        return NextResponse.json({ task: updatedTask });
+      }
+
+      // --- NORMAL STAGE CHANGE ---
       const newActivity = [
         ...(task.activity || []),
         {
@@ -395,7 +465,7 @@ export async function PUT(req) {
 
       if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
-      // notify creator and manager
+      // notifications for normal stage change
       await createNotification(
         updatedTask.created_by_email,
         "Task status changed",
@@ -418,6 +488,7 @@ export async function PUT(req) {
         .eq("role", "Manager")
         .limit(1)
         .maybeSingle();
+
       if (manager2?.email) {
         await createNotification(
           manager2.email,
@@ -430,93 +501,111 @@ export async function PUT(req) {
       return NextResponse.json({ task: updatedTask });
     }
 
-    // =====================================================================
-    // NORMAL UPDATE (No auto completion)
-    // We want to attach activity entries for brief/title changes and notify relevant parties
-    const updatedData = {
-      ...updates,
-      updated_at: new Date().toISOString(),
-    };
 
-    // detect brief/title change to add activity
-    const activities = [...(task.activity || [])];
-    if (updates.title && updates.title !== task.title) {
-      activities.push({
-        action: "Title Changed",
-        user: requester_email,
-        timestamp: new Date().toISOString(),
-        comment: `Title -> ${updates.title}`,
-      });
-    }
-    if (Object.prototype.hasOwnProperty.call(updates, "brief") && updates.brief !== task.brief) {
-      activities.push({
-        action: "Brief Changed",
-        user: requester_email,
-        timestamp: new Date().toISOString(),
-        comment: `Brief updated`,
-      });
-    }
+        // =====================================================================
+        // NORMAL UPDATE (No auto completion)
+        // We want to attach activity entries for brief/title changes and notify relevant parties
+        const updatedData = {
+          ...updates,
+          updated_at: new Date().toISOString(),
+        };
 
-    if (activities.length) updatedData.activity = activities;
+        // Handle new attachments
+        if (updates.attachments && updates.attachments.length > 0) {
+          updatedData.attachments = [
+            ...(task.attachments || []),
+            ...updates.attachments,
+          ];
 
-    const { data, error } = await supabase
-      .from("tasks")
-      .update(updatedData)
-      .eq("id", id)
-      .select()
-      .single();
+          activities.push({
+            action: "Files Added",
+            user: requester_email,
+            timestamp: new Date().toISOString(),
+            comment: `${updates.attachments.length} file(s) uploaded`,
+            new_value: updates.attachments.map(f => f.name).join(", "),
+          });
+        }
 
-    if (error)
-      return NextResponse.json({ error: error.message }, { status: 500 });
 
-    // if brief/title changed -> notify creator/assignee/manager
-    if (activities.length) {
-      const titleMsg = updates.title ? `Title updated to "${updates.title}"` : null;
-      const briefMsg = updates.brief ? `Brief updated` : null;
-      const shortMsg = [titleMsg, briefMsg].filter(Boolean).join(" • ");
+        // detect brief/title change to add activity
+        const activities = [...(task.activity || [])];
+        if (updates.title && updates.title !== task.title) {
+          activities.push({
+            action: "Title Changed",
+            user: requester_email,
+            timestamp: new Date().toISOString(),
+            comment: `Title -> ${updates.title}`,
+          });
+        }
+        if (Object.prototype.hasOwnProperty.call(updates, "brief") && updates.brief !== task.brief) {
+          activities.push({
+            action: "Brief Changed",
+            user: requester_email,
+            timestamp: new Date().toISOString(),
+            comment: `Brief updated`,
+          });
+        }
 
-      // notify assignee
-      if (data.assigned_to_email) {
-        await createNotification(
-          data.assigned_to_email,
-          "Task updated",
-          shortMsg,
-          data.id
-        );
+        if (activities.length) updatedData.activity = activities;
+
+        const { data, error } = await supabase
+          .from("tasks")
+          .update(updatedData)
+          .eq("id", id)
+          .select()
+          .single();
+
+        if (error)
+          return NextResponse.json({ error: error.message }, { status: 500 });
+
+        // if brief/title changed -> notify creator/assignee/manager
+        if (activities.length) {
+          const titleMsg = updates.title ? `Title updated to "${updates.title}"` : null;
+          const briefMsg = updates.brief ? `Brief updated` : null;
+          const shortMsg = [titleMsg, briefMsg].filter(Boolean).join(" • ");
+
+          // notify assignee
+          if (data.assigned_to_email) {
+            await createNotification(
+              data.assigned_to_email,
+              "Task updated",
+              shortMsg,
+              data.id
+            );
+          }
+
+          // notify creator (if someone else updated)
+          if (data.created_by_email && data.created_by_email !== requester_email) {
+            await createNotification(
+              data.created_by_email,
+              "Task updated",
+              shortMsg,
+              data.id
+            );
+          }
+
+          // notify manager
+          const { data: manager3 } = await supabase
+            .from("employees")
+            .select("*")
+            .eq("role", "Manager")
+            .limit(1)
+            .maybeSingle();
+          if (manager3?.email) {
+            await createNotification(
+              manager3.email,
+              "Task updated",
+              shortMsg,
+              data.id
+            );
+          }
+        }
+
+        return NextResponse.json({ task: data });
+      } catch (err) {
+        return NextResponse.json({ error: err.message }, { status: 500 });
       }
-
-      // notify creator (if someone else updated)
-      if (data.created_by_email && data.created_by_email !== requester_email) {
-        await createNotification(
-          data.created_by_email,
-          "Task updated",
-          shortMsg,
-          data.id
-        );
-      }
-
-      // notify manager
-      const { data: manager3 } = await supabase
-        .from("employees")
-        .select("*")
-        .eq("role", "Manager")
-        .limit(1)
-        .maybeSingle();
-      if (manager3?.email) {
-        await createNotification(
-          manager3.email,
-          "Task updated",
-          shortMsg,
-          data.id
-        );
-      }
     }
-
-    return NextResponse.json({ task: data });
-  } catch (err) {
-    return NextResponse.json({ error: err.message }, { status: 500 });
-  }
-}
 
 // =====================================================================
 // PATCH → MANAGER APPROVAL
