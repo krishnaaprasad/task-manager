@@ -26,6 +26,7 @@ export default function DashboardPage() {
   const [showModal, setShowModal] = useState(false);
   const [selectedTask, setSelectedTask] = useState(null);
   const [activityTask, setActivityTask] = useState(null);
+  const [briefTask, setBriefTask] = useState(null);
 
   const [search, setSearch] = useState("");
   const [filterStage, setFilterStage] = useState("");
@@ -323,7 +324,24 @@ export default function DashboardPage() {
                 <tr key={t.id} className="border-t border-gray-700">
                   <td className="p-3">{t.task_number}</td>
                   <td className="p-3">{t.title}</td>
-                  <td className="p-3 max-w-xs truncate">{t.brief || "-"}</td>
+                  <td className="p-3 max-w-xs">
+                  {t.brief?.length > 45 ? (
+                    <div>
+                      <span className="truncate inline-block max-w-[140px]">
+                        {t.brief.slice(0, 45)}...
+                      </span>
+
+                      <button
+                        onClick={() => setBriefTask(t)}
+                        className="text-blue-400 text-xs ml-2 hover:underline"
+                      >
+                        View More
+                      </button>
+                    </div>
+                  ) : (
+                    <span>{t.brief || "-"}</span>
+                  )}
+                </td>
                   <td className="p-3">{t.assigned_to_name || "-"}</td>
                   <td className="p-3">{t.priority}</td>
                   <td className="p-3">{t.approval_status === "pending" ? "⏳ Pending" : t.approval_status === "approved" ? "✅ Approved" : "❌ Rejected"}</td>
@@ -478,6 +496,7 @@ export default function DashboardPage() {
 
       {/* modals */}
       {showModal && <TaskModal onClose={() => { setShowModal(false); setSelectedTask(null); }} onSaved={handleSaved} currentUser={currentUser} employeeInfo={employeeInfo} task={selectedTask} />}
+      {briefTask && (<BriefViewModal task={briefTask} onClose={() => setBriefTask(null)} />)}
 
       {activityTask && <TaskActivityModal task={activityTask} onClose={() => setActivityTask(null)} />}
     </div>
