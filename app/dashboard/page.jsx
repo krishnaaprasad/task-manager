@@ -71,10 +71,20 @@ export default function DashboardPage() {
       const me = employeeInfo.full_name;
       let visible = allTasks || [];
       if (employeeInfo.role !== "Manager") {
-        visible = visible.filter(
-          (t) => t.created_by_email === currentUser.email || t.assigned_to_name === me
-        );
+        visible = visible.filter(t => {
+          const isCreator = t.created_by_email === currentUser.email;
+          const isAssignee = t.assigned_to_name === me;
+
+          // Employee sees his assigned task ONLY after approval
+          if (isAssignee && t.approval_status === "approved") return true;
+
+          // Creator sees his own tasks always
+          if (isCreator) return true;
+
+          return false;
+        });
       }
+
       setTasks(visible);
 
       // fetch summary from server API (server computes manager/global stats)
@@ -355,30 +365,31 @@ export default function DashboardPage() {
                   )}
 
                   {/* DELETE */}
-                  {t.created_by_email === currentUser.email && (
-                    <button
-                      onClick={() => {
-                        fetch("/api/tasks", {
-                          method: "PUT",
-                          headers: { "Content-Type": "application/json" },
-                          body: JSON.stringify({
-                            id: t.id,
-                            requester_email: currentUser.email,
-                            updates: { delete_task: true },
-                          }),
-                        })
-                          .then((r) => r.json())
-                          .then((j) => {
-                            if (j.pending) alert("Delete request sent");
-                            else if (j.deleted)
-                              setTasks((prev) => prev.filter((x) => x.id !== t.id));
-                          });
-                      }}
-                      className="p-1 hover:bg-gray-700 rounded"
-                    >
-                      <TrashIcon className="w-5 h-5 text-red-400" />
-                    </button>
-                  )}
+                 {(isManager || t.created_by_email === currentUser.email) && (
+                  <button
+                    onClick={() => {
+                      fetch("/api/tasks", {
+                        method: "PUT",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({
+                          id: t.id,
+                          requester_email: currentUser.email,
+                          updates: { delete_task: true },
+                        }),
+                      })
+                        .then((r) => r.json())
+                        .then((j) => {
+                          if (j.pending) alert("Delete request sent");
+                          else if (j.deleted)
+                            setTasks(prev => prev.filter(x => x.id !== t.id));
+                        });
+                    }}
+                    className="p-1 hover:bg-gray-700 rounded"
+                  >
+                    <TrashIcon className="w-5 h-5 text-red-400" />
+                  </button>
+                )}
+
 
                   {/* VIEW ATTACHMENTS */}
                   {t.attachments?.length > 0 && (
