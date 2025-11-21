@@ -68,7 +68,7 @@ export default function NotificationBell() {
 
     if (willOpen && unreadCount > 0 && user?.email) {
       try {
-        await fetch("/api/notifications/route/mark-read", { method: "PATCH" });
+        await fetch("/api/notifications/route/", { method: "PATCH" });
       } catch (err) {
         // fallback: call PATCH endpoint with body (some hosts require body)
         await fetch("/api/notifications", {
