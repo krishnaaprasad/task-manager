@@ -14,9 +14,24 @@ export default function NotificationBell() {
     async function loadUser() {
       const { data } = await supabase.auth.getUser();
       setUser(data?.user || null);
+
+      // Desktop notification
+      async function showDesktopNotification(title, message) {
+        if (Notification.permission === "granted") {
+          new Notification(title, { body: message });
+        }
+      }
+
     }
     loadUser();
   }, []);
+
+  useEffect(() => {
+    if (typeof window !== "undefined" && Notification.permission !== "granted") {
+      Notification.requestPermission();
+    }
+  }, []);
+
 
   useEffect(() => {
     if (!user?.email) return;
@@ -37,21 +52,25 @@ export default function NotificationBell() {
     load();
 
     // realtime subscription for notifications table (user-specific)
+    // realtime subscription
     const channel = supabase
       .channel(`notif-${user.email}`)
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "notifications", filter: `user_email=eq.${user.email}` },
         (payload) => {
-          // new notification or update
           if (payload.eventType === "INSERT") {
             setNotes(prev => [payload.new, ...prev]);
+
+            // desktop popup
+            showDesktopNotification(payload.new.title, payload.new.message);
           } else if (payload.eventType === "UPDATE") {
             setNotes(prev => prev.map(n => (n.id === payload.new.id ? payload.new : n)));
           }
         }
       )
       .subscribe();
+
 
     return () => {
       mounted = false;
@@ -68,20 +87,19 @@ export default function NotificationBell() {
 
     if (willOpen && unreadCount > 0 && user?.email) {
       try {
-        await fetch("/api/notifications/route/", { method: "PATCH" });
-      } catch (err) {
-        // fallback: call PATCH endpoint with body (some hosts require body)
         await fetch("/api/notifications", {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ user_email: user.email }),
         });
+      } catch (err) {
+        console.error("Mark read error", err);
       }
 
-      // optimistic update
       setNotes(prev => prev.map(n => ({ ...n, read: true })));
     }
   };
+
 
   // Helper: open specific task (we just set window.location to a task page)
   const openTask = (taskId) => {

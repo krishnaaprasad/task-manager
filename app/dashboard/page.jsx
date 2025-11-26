@@ -45,6 +45,16 @@ export default function DashboardPage() {
     load();
   }, []);
 
+  useEffect(() => {
+    async function check() {
+      const { data } = await supabase.auth.getUser();
+      if (!data?.user) {
+        window.location.href = "/";
+      }
+    }
+    check();
+  }, []);
+
   // ----------------------------------------------
   // LOAD EMPLOYEE META
   // ----------------------------------------------
